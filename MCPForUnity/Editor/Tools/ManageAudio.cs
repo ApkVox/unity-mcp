@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using MCPForUnity.Editor.Helpers;
 using Newtonsoft.Json.Linq;
 using UnityEditor;
+using UnityEditor.SceneManagement;
 using UnityEngine;
 using UnityEngine.Audio;
 
@@ -169,7 +170,7 @@ namespace MCPForUnity.Editor.Tools
 
             ApplySourceProperties(source, p.GetRaw("properties") as JObject);
             EditorUtility.SetDirty(go);
-            SceneHelper.MarkOwningSceneDirty(go);
+            MarkOwningSceneDirty(go);
 
             return new SuccessResponse($"AudioSource added to '{go.name}'.", new
             {
@@ -194,7 +195,7 @@ namespace MCPForUnity.Editor.Tools
             Undo.RecordObject(source, "Configure AudioSource");
             ApplySourceProperties(source, props);
             EditorUtility.SetDirty(source);
-            SceneHelper.MarkOwningSceneDirty(go);
+            MarkOwningSceneDirty(go);
 
             return new SuccessResponse($"AudioSource on '{go.name}' configured.", new
             {
@@ -212,7 +213,7 @@ namespace MCPForUnity.Editor.Tools
                 return new ErrorResponse($"GameObject '{go.name}' does not have an AudioSource.");
 
             Undo.DestroyObjectImmediate(source);
-            SceneHelper.MarkOwningSceneDirty(go);
+            MarkOwningSceneDirty(go);
 
             return new SuccessResponse($"AudioSource removed from '{go.name}'.");
         }
@@ -333,7 +334,7 @@ namespace MCPForUnity.Editor.Tools
             Undo.RecordObject(source, "Set AudioSource Clip");
             source.clip = clip;
             EditorUtility.SetDirty(source);
-            SceneHelper.MarkOwningSceneDirty(go);
+            MarkOwningSceneDirty(go);
 
             return new SuccessResponse($"Clip '{clip.name}' assigned to AudioSource on '{go.name}'.", new
             {
@@ -402,11 +403,14 @@ namespace MCPForUnity.Editor.Tools
             bool loadInBackground = pp.GetBool("loadInBackground", importer.loadInBackground);
             if (loadInBackground != importer.loadInBackground) { importer.loadInBackground = loadInBackground; changed = true; }
 
-            bool preloadAudioData = pp.GetBool("preloadAudioData", importer.preloadAudioData);
-            if (preloadAudioData != importer.preloadAudioData) { importer.preloadAudioData = preloadAudioData; changed = true; }
-
             var defaultSettings = importer.defaultSampleSettings;
             bool settingsChanged = false;
+
+            if (pp.Has("preloadAudioData"))
+            {
+                defaultSettings.preloadAudioData = pp.GetBool("preloadAudioData");
+                settingsChanged = true;
+            }
 
             string compressionFormat = pp.Get("compressionFormat");
             if (!string.IsNullOrEmpty(compressionFormat) && Enum.TryParse<AudioCompressionFormat>(compressionFormat, true, out var fmt))
@@ -515,7 +519,7 @@ namespace MCPForUnity.Editor.Tools
                 ApplyReverbZoneProperties(zone, new ToolParams(props));
 
             EditorUtility.SetDirty(go);
-            SceneHelper.MarkOwningSceneDirty(go);
+            MarkOwningSceneDirty(go);
 
             return new SuccessResponse($"AudioReverbZone added to '{go.name}'.", new
             {
@@ -540,7 +544,7 @@ namespace MCPForUnity.Editor.Tools
             Undo.RecordObject(zone, "Configure AudioReverbZone");
             ApplyReverbZoneProperties(zone, new ToolParams(props));
             EditorUtility.SetDirty(zone);
-            SceneHelper.MarkOwningSceneDirty(go);
+            MarkOwningSceneDirty(go);
 
             return new SuccessResponse($"AudioReverbZone on '{go.name}' configured.", new
             {
@@ -707,7 +711,7 @@ namespace MCPForUnity.Editor.Tools
             Undo.RecordObject(source, "Set AudioSource Mixer Group");
             source.outputAudioMixerGroup = matches[0];
             EditorUtility.SetDirty(source);
-            SceneHelper.MarkOwningSceneDirty(go);
+            MarkOwningSceneDirty(go);
 
             return new SuccessResponse($"AudioSource on '{go.name}' routed to mixer group '{matches[0].name}'.", new
             {
@@ -877,6 +881,15 @@ namespace MCPForUnity.Editor.Tools
                 parent = parent.parent;
             }
             return path;
+        }
+
+        private static void MarkOwningSceneDirty(GameObject go)
+        {
+            var prefabStage = PrefabStageUtility.GetCurrentPrefabStage();
+            if (prefabStage != null)
+                EditorSceneManager.MarkSceneDirty(prefabStage.scene);
+            else
+                EditorSceneManager.MarkSceneDirty(go.scene);
         }
 
         private static Vector3? ParseVector3(JToken token)
